@@ -189,6 +189,55 @@ fast_div64(X x, Y y)
   return (uint64_t) fast_div(x, y);
 }
 
+// Faster (?) division for the case where a single dividend (m) is
+// divided by a (decreasing) sequence of divisors (t). We compute the
+// division result by using a linear approximation, and then check the
+// result by multiplying it back by the divisor. If the check fails,
+// we recompute the approximation parameters.
+template <typename T>
+class SequenceDivider {
+public:
+  explicit SequenceDivider(T m) :
+    m(m), t_base(0), result_base(0), slope_shifted(0) {}
+
+  inline uint64_t DivideBy(uint64_t t) {
+    if (t < min_t) return fast_div64(m, t);
+
+    uint64_t result = result_base + (((t_base - t) * slope_shifted) >> shift);
+
+    uint64_t error = m - result * t;
+    if (__builtin_expect(error < 3*t, true)) {
+      result_base += (error >= 2*t);
+      return result + (error >= t) + (error >= 2*t);
+    }
+
+    // The error is too big, recompute the approximation.
+    result_base = fast_div64(m, t);
+    slope_shifted = fast_div64(T(result_base) << shift, t);
+    t_base = t;
+    return result_base;
+  }
+
+private:
+  static constexpr int shift = 16;
+  static constexpr uint64_t min_t = 1 << 17;
+  const T m;
+  uint64_t t_base, result_base, slope_shifted;
+
+  // Implementation notes:
+  //
+  // 1. This optmization probably makes sense only for processors with
+  // a slow divider, for example, Skylake and earlier.
+  //
+  // 2. The values of shift and min_t could use some tuning.
+  //
+  // 3. It would be more accurate to compute result_base shifted, in a
+  // similar way as we compute slope_shifted, but that could overflow T.
+  //
+  // 4. Initializing non-const member fields is not needed, but the
+  // compiler complains otherwise.
+};
+
 } // namespace
 
 #endif

@@ -107,6 +107,7 @@ T D_thread(T x,
       min_m = factor.to_index(min_m);
       max_m = factor.to_index(max_m);
 
+      SequenceDivider<T> xp_div(xp);
       for (int64_t m = max_m; m > min_m; m--)
       {
         // mu[m] != 0 && 
@@ -114,7 +115,7 @@ T D_thread(T x,
         // mpf[m] <= y
         if (prime < factor.is_leaf(m))
         {
-          int64_t xpm = fast_div64(xp, factor.to_number(m));
+          int64_t xpm = xp_div.DivideBy(factor.to_number(m));
           int64_t stop = xpm - low;
           int64_t phi_xpm = phi[b] + sieve.count(stop);
           int64_t mu_m = factor.mu(m);
@@ -143,9 +144,10 @@ T D_thread(T x,
       if (prime >= primes[l])
         goto next_segment;
 
+      SequenceDivider<T> xp_div(xp);
       for (; primes[l] > min_m; l--)
       {
-        int64_t xpq = fast_div64(xp, primes[l]);
+        int64_t xpq = xp_div.DivideBy(primes[l]);
         int64_t stop = xpq - low;
         int64_t phi_xpq = phi[b] + sieve.count(stop);
         sum += phi_xpq;
