@@ -211,11 +211,18 @@ public:
       return result + (error >= t) + (error >= 2*t);
     }
 
-    // The error is too big, recompute the approximation.
+    // The error is too big, so we recompute the approximation.
     result_base = fast_div64(m, t);
     slope_shifted = fast_div64(T(result_base) << shift, t);
     t_base = t;
-    return result_base;
+
+    // We try to avoid creating an immediate data dependency on the
+    // two divisions above, hopefully letting them run in parallel
+    // with other computations.
+    if (__builtin_expect(error < 4*t, true))
+      return result + 3;
+    else
+      return result_base;
   }
 
 private:
@@ -224,18 +231,29 @@ private:
   const T m;
   uint64_t t_base, result_base, slope_shifted;
 
+  static_assert(
+    min_t >= (1 << shift),
+    "With the current values, the computation of slope_shifted can overflow");
+
   // Implementation notes:
   //
   // 1. This optmization probably makes sense only for processors with
   // a slow divider, for example, Skylake and earlier.
   //
-  // 2. The values of shift and min_t could use some tuning.
+  // 2. The value of min_t could use some tuning, in particular, it
+  // may make sense to adjust it dynamically in the constructor, based
+  // on m.
   //
   // 3. It would be more accurate to compute result_base shifted, in a
   // similar way as we compute slope_shifted, but that could overflow T.
   //
   // 4. Initializing non-const member fields is not needed, but the
   // compiler complains otherwise.
+  //
+  // 5. When computing the approximation parameters, we divide by the
+  // same divisor (t) twice. It may be more efficient to simulate
+  // these two divisions by multiplying by the inverse of t, which
+  // would need to be computed only once.
 };
 
 } // namespace
